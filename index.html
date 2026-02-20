@@ -2,80 +2,187 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bitcoin Runner Fixed</title>
     <style>
-        body {
-            background-color: #000; /* Fondo negro como la imagen */
-            margin: 0;
-            padding: 20px 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px; /* Espaciado entre anuncios */
-        }
-
-        .ad-container {
-            display: flex;
-            justify-content: center;
-            width: 100%;
+        body { 
+            margin: 0; padding: 0; 
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; height: 100vh; 
+            background-color: #f0f0f0; 
+            font-family: Arial, sans-serif; 
             overflow: hidden;
+            touch-action: manipulation;
         }
-
-        /* Ajuste especial para que el 728x90 se vea en móviles */
-        .responsive-728 {
-            max-width: 100%;
-            overflow-x: auto;
-            display: flex;
-            justify-content: center;
+        canvas { 
+            background-color: #fff; 
+            border-bottom: 4px solid #F7931A;
+            max-width: 95%;
+            height: auto;
+            box-shadow: 0px 10px 20px rgba(0,0,0,0.1);
         }
-
-        /* Estilo para asegurar que los iframes no rompan el diseño */
-        iframe {
-            max-width: 100%;
-            border: none;
-        }
+        .ui { margin-bottom: 10px; color: #333; font-weight: bold; font-size: 20px; }
     </style>
 </head>
 <body>
 
-    <div class="ad-container responsive-728">
-        <script>
-            atOptions = { 'key' : 'a8ae03c9bc8a85686d94a6ff6f7e029a', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {} };
-        </script>
-        <script src="https://www.highperformanceformat.com/a8ae03c9bc8a85686d94a6ff6f7e029a/invoke.js"></script>
-    </div>
+    <div class="ui">Puntos: <span id="scoreVal">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+    <p style="color: #888; font-size: 14px; margin-top: 10px;">Toca la pantalla para saltar</p>
 
-    <div class="ad-container">
-        <script>
-            atOptions = { 'key' : 'e9d45fafde26641213273ad7e91bb703', 'format' : 'iframe', 'height' : 60, 'width' : 468, 'params' : {} };
-        </script>
-        <script src="https://www.highperformanceformat.com/e9d45fafde26641213273ad7e91bb703/invoke.js"></script>
-    </div>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreVal = document.getElementById('scoreVal');
 
-    <div class="ad-container">
-        <script>
-            atOptions = { 'key' : '604a9808f9c20db18ee8ab6fe0a4452d', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
-        </script>
-        <script src="https://www.highperformanceformat.com/604a9808f9c20db18ee8ab6fe0a4452d/invoke.js"></script>
-    </div>
+    canvas.width = 600;
+    canvas.height = 250;
 
-    <div class="ad-container">
-        <script>
-            atOptions = { 'key' : 'a0dc4f0e532b9ca72fd7ac9da83d4dbc', 'format' : 'iframe', 'height' : 250, 'width' : 300, 'params' : {} };
-        </script>
-        <script src="https://www.highperformanceformat.com/a0dc4f0e532b9ca72fd7ac9da83d4dbc/invoke.js"></script>
-    </div>
+    let score = 0;
+    let gameSpeed = 6;
+    let isGameOver = false;
+    let animationId;
+    let obstacleTimeout; // Para controlar el ciclo de generación
 
-    <div class="ad-container">
-        <script>
-            atOptions = { 'key' : '9c59ca7b49dfd5ee36cfbba819d528c3', 'format' : 'iframe', 'height' : 600, 'width' : 160, 'params' : {} };
-        </script>
-        <script src="https://www.highperformanceformat.com/9c59ca7b49dfd5ee36cfbba819d528c3/invoke.js"></script>
-    </div>
+    const btc = {
+        x: 50,
+        y: 180,
+        radius: 25,
+        dy: 0,
+        jumpForce: 13,
+        gravity: 0.7,
+        grounded: false,
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x + this.radius, this.y + this.radius, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "#F7931A";
+            ctx.fill();
+            ctx.fillStyle = "white";
+            ctx.font = "bold 30px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("₿", this.x + this.radius, this.y + this.radius + 10);
+            ctx.closePath();
+        }
+    };
 
-    <script>(function(s){s.dataset.zone='10273223',s.src='https://groleegni.net/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
-    <script>(function(s){s.dataset.zone='10273218',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
-    <script src="https://pl28743898.effectivegatecpm.com/cb/d4/6e/cbd46ed9d9f3ca195bc6a84ad9f024e4.js"></script>
+    let obstacles = [];
 
+    function startObstacleCycle() {
+        // Limpiamos cualquier timeout previo para evitar duplicados
+        clearTimeout(obstacleTimeout);
+        
+        function spawn() {
+            if (isGameOver) return;
+            
+            let height = 30 + Math.random() * 40;
+            obstacles.push({
+                x: canvas.width,
+                y: canvas.height - height,
+                width: 25,
+                height: height
+            });
+            
+            // Tiempo aleatorio entre obstáculos
+            let nextSpawn = 1000 + Math.random() * 1500;
+            obstacleTimeout = setTimeout(spawn, nextSpawn);
+        }
+        
+        spawn();
+    }
+
+    function drawObstacles() {
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let obs = obstacles[i];
+            obs.x -= gameSpeed;
+            
+            ctx.fillStyle = "#2d5a27";
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+            // Colisión
+            if (btc.x + 10 < obs.x + obs.width && 
+                btc.x + (btc.radius * 2) - 10 > obs.x &&
+                btc.y + (btc.radius * 2) > obs.y) {
+                gameOver();
+            }
+
+            // Puntuación y limpieza
+            if (obs.x + obs.width < 0) {
+                obstacles.splice(i, 1);
+                score++;
+                scoreVal.innerText = score;
+                if (score % 5 === 0) gameSpeed += 0.3;
+            }
+        }
+    }
+
+    function update() {
+        if (isGameOver) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        btc.dy += btc.gravity;
+        btc.y += btc.dy;
+
+        if (btc.y + btc.radius * 2 > canvas.height) {
+            btc.y = canvas.height - btc.radius * 2;
+            btc.dy = 0;
+            btc.grounded = true;
+        }
+
+        btc.draw();
+        drawObstacles();
+
+        animationId = requestAnimationFrame(update);
+    }
+
+    function jump(e) {
+        if (e && e.type === 'touchstart') e.preventDefault();
+        
+        if (isGameOver) {
+            restartGame();
+            return;
+        }
+
+        if (btc.grounded) {
+            btc.dy = -btc.jumpForce;
+            btc.grounded = false;
+        }
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        clearTimeout(obstacleTimeout);
+        cancelAnimationFrame(animationId);
+        
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.font = "bold 25px Arial";
+        ctx.fillText("HODL FALLIDO", canvas.width/2, canvas.height/2 - 10);
+        ctx.font = "18px Arial";
+        ctx.fillText("Toca para reintentar", canvas.width/2, canvas.height/2 + 30);
+    }
+
+    function restartGame() {
+        score = 0;
+        scoreVal.innerText = score;
+        obstacles = [];
+        gameSpeed = 6;
+        isGameOver = false;
+        btc.y = 180;
+        btc.dy = 0;
+        
+        startObstacleCycle(); // Reiniciamos el ciclo de obstáculos
+        update(); // Reiniciamos la animación
+    }
+
+    window.addEventListener('touchstart', jump, {passive: false});
+    window.addEventListener('mousedown', jump);
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') jump(); });
+
+    // Inicio por primera vez
+    startObstacleCycle();
+    update();
+</script>
 </body>
 </html>
